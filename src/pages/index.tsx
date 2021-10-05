@@ -2,7 +2,7 @@ import React from 'react';
 
 import { ChevronLeftIcon, PaperAirplaneIcon } from '@heroicons/react/solid';
 import moment, { Moment } from 'moment';
-import { findWhere } from 'underscore';
+import { findWhere, last } from 'underscore';
 
 import 'moment/locale/id';
 
@@ -39,6 +39,10 @@ type BotMessageType = {
   message: MessageType;
 };
 
+type BotTypingProps = {
+  show: boolean;
+};
+
 const Index = () => {
   const botAuthor: AuthorType = {
     avatar:
@@ -60,10 +64,50 @@ const Index = () => {
     text: 'Hi, there anggiedimasta',
   };
 
+  const skillsMessage: MessageType = {
+    createdAt: moment(),
+    author: botAuthor,
+    text: 'My skills are telling you what day it is today, what date it is, what time it is, also the weather forecast for today.',
+  };
+
+  const dayMessage: MessageType = {
+    createdAt: moment(),
+    author: botAuthor,
+    text: moment().format('dddd'),
+  };
+
+  const dateMessage: MessageType = {
+    createdAt: moment(),
+    author: botAuthor,
+    text: moment().format('LL'),
+  };
+
+  const timeMessage: MessageType = {
+    createdAt: moment(),
+    author: botAuthor,
+    text: moment().format('h:mm:ss a'),
+  };
+
   const botMessages: BotMessageType[] = [
     {
       name: 'hello',
       message: welcomeMessage,
+    },
+    {
+      name: 'skills',
+      message: skillsMessage,
+    },
+    {
+      name: 'day',
+      message: dayMessage,
+    },
+    {
+      name: 'date',
+      message: dateMessage,
+    },
+    {
+      name: 'time',
+      message: timeMessage,
     },
   ];
 
@@ -73,20 +117,21 @@ const Index = () => {
   const inputMessage: React.RefObject<HTMLInputElement> =
     React.useRef<HTMLInputElement>(null);
 
+  const loadingDots: React.RefObject<HTMLInputElement> =
+    React.useRef<HTMLInputElement>(null);
+
   const [messages, setMessages] = React.useState<MessageType[]>([]);
+  const [isBotTyping, setIsBotTyping] = React.useState<boolean>(false);
 
   const sendMessage = (
-    event: React.SyntheticEvent,
+    event?: React.SyntheticEvent | null,
     author?: AuthorRoleType,
     botMessageName?: BotMessageNameType
   ): void => {
-    event.preventDefault();
+    if (event) {
+      event.preventDefault();
+    }
 
-    const target = event.target as typeof event.target & {
-      new_message: { value: string };
-    };
-
-    const message: string = target.new_message.value;
     let newMessages: MessageType[] = [];
 
     if (author === 'bot') {
@@ -97,38 +142,74 @@ const Index = () => {
 
       if (matchedMessage) {
         newMessages = [...messages, matchedMessage.message];
+        setMessages(newMessages);
       }
-      setMessages(newMessages);
-    } else {
-      newMessages = [
-        ...messages,
-        {
-          author: userAuthor,
-          createdAt: moment(new Date()),
-          text: message,
-        },
-      ];
-      setMessages(newMessages);
+    } else if (event) {
+      const target = event.target as typeof event.target & {
+        new_message: { value: string };
+      };
+
+      const message: string = target.new_message.value;
+
+      if (message.length > 0) {
+        newMessages = [
+          ...messages,
+          {
+            author: userAuthor,
+            createdAt: moment(new Date()),
+            text: message,
+          },
+        ];
+        setMessages(newMessages);
+      }
     }
 
     process.nextTick(() => {
-      if (messageList.current?.lastElementChild) {
-        target.new_message.value = '';
-        messageList.current.scrollTo({
-          behavior: 'smooth',
-          top:
-            messageList.current.lastElementChild.getBoundingClientRect().top +
-            20,
-        });
-      }
+      if (event) {
+        const target = event.target as typeof event.target & {
+          new_message: { value: string };
+        };
 
-      process.nextTick(() => {
-        if (author !== 'bot') {
-          sendMessage(event, 'bot', message);
-        }
-      });
+        target.new_message.value = '';
+      }
     });
   };
+
+  React.useEffect(() => {
+    if (messages.length > 0) {
+      if (last(messages)?.author.role === 'user' && last(messages)?.text) {
+        let botTypingTimer: number;
+        const checkMatchedBotMessage: BotMessageType | undefined = findWhere(
+          botMessages,
+          { name: last(messages)?.text }
+        );
+
+        if (checkMatchedBotMessage) {
+          setTimeout(() => {
+            setIsBotTyping(true);
+            botTypingTimer = window.setInterval(function () {
+              if (
+                loadingDots.current &&
+                loadingDots.current.innerHTML.length > 2
+              )
+                loadingDots.current.innerHTML = '';
+              else if (loadingDots.current)
+                loadingDots.current.innerHTML += '.';
+            }, 750);
+          }, 1500);
+
+          setTimeout(() => {
+            clearInterval(botTypingTimer);
+            setIsBotTyping(false);
+
+            process.nextTick(() => {
+              sendMessage(null, 'bot', last(messages)?.text);
+            });
+          }, 4500);
+        }
+      }
+    }
+  });
 
   const messageOptions: string[] = [
     'hello',
@@ -145,6 +226,34 @@ const Index = () => {
     if (span?.innerHTML && inputMessage?.current) {
       inputMessage.current.value = span.innerHTML;
     }
+  };
+
+  const BotTypingBubble = (props: BotTypingProps) => {
+    if (!props.show) {
+      return null;
+    }
+
+    return (
+      <div className="flex w-full mt-2 justify-start">
+        <div className="flex rounded-full">
+          <img
+            className="w-12 h-12 rounded-full border bg-green-400"
+            src={botAuthor.avatar}
+          />
+          <div className="flex flex-col mx-2 w-full items-start">
+            <div className="flex items-center">
+              <span className="flex font-medium text-sm">{botAuthor.name}</span>
+            </div>
+            <span
+              className="flex tracking-wide text-base py-2 px-3 rounded-full mt-1 bg-white"
+              ref={loadingDots}
+            >
+              .
+            </span>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -164,7 +273,7 @@ const Index = () => {
         </div>
         <div className="flex flex-col justify-between w-full h-96 bg-gray-200">
           <div
-            className="flex flex-col w-full p-4 overflow-scroll pb-20"
+            className="flex flex-col w-full p-4 overflow-scroll pb-36"
             ref={messageList}
           >
             {messages.map((message, i) => (
@@ -212,7 +321,7 @@ const Index = () => {
                       </span>
                     </div>
                     <span
-                      className={`flex tracking-wide text-base py-2 px-3 rounded-full mt-1 ${
+                      className={`flex tracking-wide text-base py-2 px-3 rounded-xl mt-1 max-w-xs ${
                         message.author.role === 'bot'
                           ? 'bg-white'
                           : 'text-white bg-gradient-to-tl from-indigo-500 to-purple-400'
@@ -224,15 +333,16 @@ const Index = () => {
                 </div>
               </div>
             ))}
+            <BotTypingBubble show={isBotTyping} />
           </div>
           <div className="flex w-full px-4 absolute bottom-0 mb-20 z-10 items-center">
             {messageOptions.map((message, i) => (
               <button
-                className="rounded-full flex items-center justify-center px-2 py-1 border-2 mx-1 border-blue-500"
+                className="rounded-full flex items-center justify-center px-2 py-1 border-2 mx-1 bg-gradient-to-tl from-indigo-400 to-purple-400"
                 key={i}
                 onClick={setMesageByOption}
               >
-                <span className="text-blue-500 font-semibold text-sm">
+                <span className="text-white font-semibold text-sm">
                   {message}
                 </span>
               </button>
